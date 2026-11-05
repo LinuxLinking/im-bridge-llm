@@ -1,0 +1,18 @@
+.venv/
+.env
+state.json
+identity.json
+memory.db
+writer_state.json
+bridge.lock
+pending.json
+__pycache__/
+*.pyc
+.pytest_cache/
+@AutomationLog.txt
+_spike_*
+_*.log
+_*.err
+
+# 归档包（本地生成，不入库）
+*.zip

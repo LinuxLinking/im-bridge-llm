@@ -1,0 +1,8 @@
+uiautomation==2.0.29
+fastapi
+uvicorn
+openai
+httpx
+pywin32
+pytest
+mcp
