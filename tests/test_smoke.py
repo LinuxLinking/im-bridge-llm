@@ -2,15 +2,15 @@
 
 import pytest
 
-from bridge import qq_uia, reader
+from bridge import client_uia, reader
 
 
 def test_smoke_parse_live_client():
-    if qq_uia.find_qq_window() is None:
+    if client_uia.find_client_window() is None:
         pytest.skip("客户端未运行")
-    nodes = qq_uia.snapshot()
+    nodes = client_uia.snapshot()
     if not nodes:
-        pytest.skip("AX 树为空：客户端未带 %s 启动" % qq_uia.ACCESSIBILITY_FLAG)
+        pytest.skip("AX 树为空：客户端未带 %s 启动" % client_uia.ACCESSIBILITY_FLAG)
     convs = reader.parse_conversations(nodes)
     if not convs:
         pytest.skip("会话列表为空：客户端可能未登录")

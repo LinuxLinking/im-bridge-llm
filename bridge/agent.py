@@ -1,6 +1,6 @@
 """模型层：把「历史 + 本条消息」变成一条回复。
 
-模型通道在 bridge/llm.py（harness 网关 / DashScope 二选一），本文件只管
+模型通道在 bridge/llm.py（DashScope，OpenAI 兼容），本文件只管
 消息怎么拼、提示词怎么拼、出口怎么筛。
 """
 
@@ -20,7 +20,7 @@ def line(sender: str, text: str) -> str:
 class Agent:
     def build_messages(self, history, user_text):
         """历史 + 本条消息 → messages（自己的发言算 assistant）。"""
-        nickname = config.get("QQ_SELF_NICKNAME")
+        nickname = config.get("SELF_NICKNAME")
         messages = []
         for message in history:
             if not message.text:

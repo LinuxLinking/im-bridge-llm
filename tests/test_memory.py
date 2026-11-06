@@ -42,7 +42,7 @@ def test_people_returns_profile(monkeypatch):
         status_code = 200
 
         def json(self):
-            return {"key": "qq:123", "speaker": "老王", "uin": "123",
+            return {"key": "uin:123", "speaker": "老王", "uin": "123",
                     "bio": "做水利的", "facts": ["负责资料汇总"],
                     "updated_at": "2026-11-04 10:00:00"}
 
@@ -77,5 +77,5 @@ def test_mcp_memory_tool_lists_profiles(monkeypatch):
     import bridge.mcp_server as mcp
     monkeypatch.setattr(mcp.memory, "all_people",
                         lambda: [{"speaker": "老王", "bio": "做水利的", "facts": []}])
-    out = mcp.qq_memory("")
+    out = mcp.memory_profile("")
     assert out["people"][0]["speaker"] == "老王"

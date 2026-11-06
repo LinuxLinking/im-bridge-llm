@@ -11,11 +11,13 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from bridge import qq_uia  # noqa: E402
+from bridge import client_uia, config  # noqa: E402
 
 
-def kill_qq() -> None:
-    subprocess.run(["taskkill", "/IM", "QQ.exe", "/F"], capture_output=True)
+def kill_client() -> None:
+    exe = config.get("CLIENT_EXE", r"C:\path\to\client.exe")
+    name = os.path.basename(exe)
+    subprocess.run(["taskkill", "/IM", name, "/F"], capture_output=True)
     time.sleep(2)
 
 
@@ -25,19 +27,19 @@ def main():
     args = ap.parse_args()
 
     if args.restart:
-        print("killing QQ.exe ...")
-        kill_qq()
-    elif qq_uia.qq_running():
-        print("client already running (ax tree may be empty if it was started without %s)" % qq_uia.ACCESSIBILITY_FLAG)
+        print("killing client ...")
+        kill_client()
+    elif client_uia.client_running():
+        print("client already running (ax tree may be empty if it was started without %s)" % client_uia.ACCESSIBILITY_FLAG)
         return 0
 
-    print("launching client with %s ..." % qq_uia.ACCESSIBILITY_FLAG)
-    if not qq_uia.launch_qq():
+    print("launching client with %s ..." % client_uia.ACCESSIBILITY_FLAG)
+    if not client_uia.launch_client():
         print("launch failed: no client window within timeout")
         return 1
-    rect = qq_uia.window_rect()
+    rect = client_uia.window_rect()
     print("client window up:", rect)
-    print("named nodes:", len([n for n in qq_uia.snapshot() if n.get("name")]))
+    print("named nodes:", len([n for n in client_uia.snapshot() if n.get("name")]))
     return 0
 
 

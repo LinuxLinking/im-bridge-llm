@@ -10,7 +10,7 @@
 - 做成**按需查询 + 缓存**：查到一次记进 identity.json，之后直接读缓存。
 
 查找策略（按可靠性排序）：
-1. 聊天标题按钮（`chat-header__contact-name`）——私聊场景最稳。
+1. 聊天标题按钮——按 CLIENT_HEADER_NAME_CLASS 配置的 className 子串定位，私聊场景最稳。
 2. 群成员面板里的名字——需要成员面板展开。
 3. 会话列表里的名字——那是会话项，点开是聊天不是资料卡，通常无效。
 
@@ -21,7 +21,7 @@ import json
 import os
 import time
 
-from bridge import config, qq_uia
+from bridge import config, client_uia
 
 STATE_FILE = "identity.json"
 
@@ -120,7 +120,7 @@ def _visible(ctrl) -> bool:
 
 def _read_via_card(nickname: str) -> str:
     """点开昵称的资料卡读号码。找不到成员或读不到就返回空串。"""
-    win = qq_uia.find_qq_window()
+    win = client_uia.find_client_window()
     if win is None:
         return ""
 
@@ -132,20 +132,28 @@ def _read_via_card(nickname: str) -> str:
             target.Click(simulateMove=False)
         except Exception:
             continue
-        uin = qq_uia.read_profile_card_qqid()
-        qq_uia.close_profile_card()
+        uin = client_uia.read_profile_card_id()
+        client_uia.close_profile_card()
         if uin:
             return uin
     return ""
 
 
+def _header_name_class() -> str:
+    """聊天标题按钮的 className 子串（按客户端填，可用 scripts/dump_ax.py 查实际值）。留空则跳过该策略。"""
+    return config.get("CLIENT_HEADER_NAME_CLASS", "").strip()
+
+
 def _click_header_name(win, nickname: str):
-    """聊天标题按钮：私聊里点对方名字直接弹资料卡（实测最可靠）。"""
-    for ctrl in qq_uia.iter_controls(win):
+    """聊天标题按钮：私聊里点对方名字直接弹资料卡（最可靠，需配 CLIENT_HEADER_NAME_CLASS）。"""
+    cls = _header_name_class()
+    if not cls:
+        return None
+    for ctrl in client_uia.iter_controls(win):
         try:
             if ctrl.ControlTypeName != "ButtonControl":
                 continue
-            if "chat-header__contact-name" not in (ctrl.ClassName or ""):
+            if cls not in (ctrl.ClassName or ""):
                 continue
             if (ctrl.Name or "").strip() != nickname:
                 continue
@@ -158,7 +166,7 @@ def _click_header_name(win, nickname: str):
 
 def _click_any_name(win, nickname: str):
     """兜底：聊天区/成员面板里任意可见的同名控件。"""
-    for ctrl in qq_uia.iter_controls(win):
+    for ctrl in client_uia.iter_controls(win):
         try:
             if (ctrl.Name or "").strip() != nickname:
                 continue

@@ -14,7 +14,7 @@ import time
 
 import win32con
 
-from bridge import qq_uia, reader
+from bridge import client_uia, reader
 
 SEND_DELAY = 0.8
 PLACEHOLDER = "按住 Win + Alt"
@@ -89,11 +89,11 @@ def editor_text(conversation: str, editor=None) -> str:
     editor 可以把已经找到的输入框控件传进来复用——重新找一次要遍历整棵树（2 秒以上）。
     """
     if editor is None:
-        editor = qq_uia.input_editor(conversation)
+        editor = client_uia.input_editor(conversation)
     if editor is None:
         return ""
     try:
-        return editor.GetPattern(qq_uia.TEXT_PATTERN_ID).DocumentRange.GetText(-1) or ""
+        return editor.GetPattern(client_uia.TEXT_PATTERN_ID).DocumentRange.GetText(-1) or ""
     except Exception:
         return ""
 
@@ -103,7 +103,7 @@ def _focus_editor(editor) -> bool:
         return False
     rect = editor.BoundingRectangle
     # 点靠左上的正文起点，避开右下角的发送按钮
-    qq_uia.click_at(rect.left + 20, rect.top + 16)
+    client_uia.click_at(rect.left + 20, rect.top + 16)
     return True
 
 
@@ -115,13 +115,13 @@ def _clear_editor(editor) -> None:
     if editor is None:
         return
     try:
-        pattern = editor.GetPattern(qq_uia.TEXT_PATTERN_ID)
+        pattern = editor.GetPattern(client_uia.TEXT_PATTERN_ID)
         content = pattern.DocumentRange.GetText(-1) or ""
         if not content.strip() or PLACEHOLDER in content:
             return
         pattern.DocumentRange.Select()
         time.sleep(0.15)
-        qq_uia.post_key(win32con.VK_BACK)
+        client_uia.post_key(win32con.VK_BACK)
         time.sleep(0.25)
     except Exception:
         pass
@@ -132,7 +132,7 @@ def verify_sent(conversation: str, text: str) -> bool:
     target = _norm(text)
     if not target:
         return False
-    for message in reversed(reader.parse_chat(qq_uia.snapshot())):
+    for message in reversed(reader.parse_chat(client_uia.snapshot())):
         body = _norm(message.text)
         if body and (body == target or target in body):
             return True
@@ -142,7 +142,7 @@ def verify_sent(conversation: str, text: str) -> bool:
 def _focus_window(win) -> bool:
     """抢前台；用户正在操作别的窗口时可能失败，重试几次。"""
     for _ in range(3):
-        if qq_uia.set_focus(win):
+        if client_uia.set_focus(win):
             return True
         time.sleep(0.4)
     return False
@@ -168,15 +168,15 @@ def _send(conversation: str, text: str) -> bool:
     text = (text or "").replace("\r", " ").replace("\n", " ").strip()
     if not text:
         return False
-    win = qq_uia.find_qq_window()
+    win = client_uia.find_client_window()
     if win is None:
         return False
     # 只往「当前打开的会话」发：切会话后输入框会指向别的群，发错代价太大
-    current = reader.parse_current_conversation(qq_uia.snapshot())
+    current = reader.parse_current_conversation(client_uia.snapshot())
     if current != conversation:
         return False
     # 一次遍历拿齐输入框和发送按钮，后面全部复用，省掉 4 次整树遍历
-    editor, button = qq_uia.find_chat_controls(conversation)
+    editor, button = client_uia.find_chat_controls(conversation)
     if editor is None:
         return False
     if not _focus_window(win):
@@ -195,7 +195,7 @@ def _send(conversation: str, text: str) -> bool:
     _save_known(known)
     typed = False
     for _ in range(2):
-        qq_uia.type_text(text)
+        client_uia.type_text(text)
         if _wait_for_text(editor, text):
             typed = True
             break
@@ -207,9 +207,9 @@ def _send(conversation: str, text: str) -> bool:
         try:
             button.Click(simulateMove=False)
         except Exception:
-            qq_uia.press_enter()
+            client_uia.press_enter()
     else:
-        qq_uia.press_enter()
+        client_uia.press_enter()
     time.sleep(SEND_DELAY)
     if verify_sent(conversation, text):
         known[conversation] = ""

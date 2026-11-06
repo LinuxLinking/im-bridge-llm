@@ -126,7 +126,7 @@ def untrusted_text(messages, extra: str = "") -> str:
     extra 是记忆服务抽出来的人物档案/会话摘要——它同样源自群里的话，
     一样是不可信输入。
     """
-    nickname = config.get("QQ_SELF_NICKNAME")
+    nickname = config.get("SELF_NICKNAME")
     parts = [m.text for m in messages if m.text and not m.is_self and m.sender != nickname]
     if extra:
         parts.append(extra)

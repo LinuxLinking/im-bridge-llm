@@ -32,7 +32,7 @@ def test_pending_skips_recent_messages(tmp_path):
 
 
 def test_key_prefers_uin():
-    assert key_for("老王", "123") == "qq:123"
+    assert key_for("老王", "123") == "uin:123"
     assert key_for("老王", "") == "nick:老王"
 
 
@@ -51,7 +51,7 @@ def test_profile_migrates_to_uin_when_it_becomes_known(tmp_path):
     store.upsert_person("老王", "123", "做水利的", ["习惯微信发文件"])
     assert len(store.all_people()) == 1
     people = store.people("老王", uin="123")
-    assert people["key"] == "qq:123"
+    assert people["key"] == "uin:123"
     assert people["uin"] == "123"
     assert set(people["facts"]) == {"负责资料汇总", "习惯微信发文件"}
 

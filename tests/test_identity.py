@@ -1,7 +1,7 @@
 from bridge import identity
 
 
-def test_known_returns_cached_qqid(tmp_path):
+def test_known_returns_cached_uin(tmp_path):
     path = str(tmp_path / "identity.json")
     identity.remember("小明", "10001", path)
     assert identity.known("小明", path) == "10001"
@@ -35,14 +35,14 @@ def test_configured_ids_parses_pairs(monkeypatch):
     assert identity.configured_ids() == {"小明": "10001", "小红": "10002"}
 
 
-def test_verify_reports_mismatch_when_qqid_differs(tmp_path, monkeypatch):
+def test_verify_reports_mismatch_when_uin_differs(tmp_path, monkeypatch):
     path = str(tmp_path / "identity.json")
     monkeypatch.setenv("KNOWN_IDS", "小明=10001")
     identity.remember("小明", "10003", path)
     assert identity.verify("小明", path) == "mismatch"
 
 
-def test_verify_reports_ok_when_qqid_matches(tmp_path, monkeypatch):
+def test_verify_reports_ok_when_uin_matches(tmp_path, monkeypatch):
     path = str(tmp_path / "identity.json")
     monkeypatch.setenv("KNOWN_IDS", "小明=10001")
     identity.remember("小明", "10001", path)

@@ -40,8 +40,8 @@ CREATE TABLE IF NOT EXISTS conv_summary (
 
 
 def key_for(speaker: str, uin: str) -> str:
-    """人物档案的键：号码已知用 qq:<uin>，否则用 nick:<昵称>。"""
-    return ("qq:%s" % uin) if uin else ("nick:%s" % speaker)
+    """人物档案的键：号码已知用 uin:<uin>，否则用 nick:<昵称>。"""
+    return ("uin:%s" % uin) if uin else ("nick:%s" % speaker)
 
 
 def merge_facts(old, new) -> list:
@@ -149,7 +149,7 @@ class Store:
     def upsert_person(self, speaker: str, uin: str, bio: str, facts: list) -> str:
         """写档案：facts 追加去重，bio 已有则保留旧的（保持稳定）。
 
-        uin 之前未知、现在知道了 → 把 nick:<昵称> 的旧档案迁移到 qq:<uin>，
+        uin 之前未知、现在知道了 → 把 nick:<昵称> 的旧档案迁移到 uin:<uin>，
         不留下重复档案。
         """
         key = key_for(speaker, uin)

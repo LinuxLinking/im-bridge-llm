@@ -1,4 +1,4 @@
-"""常驻守护：MCP server 挂了就重启，保证 harness 随时能调。
+"""常驻守护：MCP server 挂了就重启，保证调用方随时能调。
 
 用法（项目根目录）：
     .venv\Scripts\python.exe scripts\mcp_daemon.py

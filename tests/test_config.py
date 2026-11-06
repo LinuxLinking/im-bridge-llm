@@ -3,18 +3,18 @@ from bridge import config
 
 def test_env_file_does_not_override_real_env(tmp_path, monkeypatch):
     p = tmp_path / ".env"
-    p.write_text("MINIMAX_MODEL=from-file\n", encoding="utf-8")
-    monkeypatch.setenv("MINIMAX_MODEL", "from-env")
+    p.write_text("DASHSCOPE_MODEL=from-file\n", encoding="utf-8")
+    monkeypatch.setenv("DASHSCOPE_MODEL", "from-env")
     config.load_env(str(p))
-    assert config.get("MINIMAX_MODEL") == "from-env"
+    assert config.get("DASHSCOPE_MODEL") == "from-env"
 
 
 def test_env_file_fills_missing_key(tmp_path, monkeypatch):
     p = tmp_path / ".env"
-    p.write_text("MINIMAX_MODEL=from-file\n", encoding="utf-8")
-    monkeypatch.delenv("MINIMAX_MODEL", raising=False)
+    p.write_text("DASHSCOPE_MODEL=from-file\n", encoding="utf-8")
+    monkeypatch.delenv("DASHSCOPE_MODEL", raising=False)
     config.load_env(str(p))
-    assert config.get("MINIMAX_MODEL") == "from-file"
+    assert config.get("DASHSCOPE_MODEL") == "from-file"
 
 
 def test_whitelist_splits_and_strips(monkeypatch):
@@ -23,8 +23,8 @@ def test_whitelist_splits_and_strips(monkeypatch):
 
 
 def test_defaults_apply_when_env_missing(monkeypatch):
-    monkeypatch.delenv("HARNESS_BASE_URL", raising=False)
-    assert config.get("HARNESS_BASE_URL") == "https://agent.minimax.cn/mavis/api/v1/llm/v1"
+    monkeypatch.delenv("DASHSCOPE_BASE_URL", raising=False)
+    assert config.get("DASHSCOPE_BASE_URL") == "https://dashscope.aliyuncs.com/compatible-mode/v1"
     monkeypatch.delenv("MIN_SEND_INTERVAL", raising=False)
     assert config.get_float("MIN_SEND_INTERVAL", 15) == 15.0
 

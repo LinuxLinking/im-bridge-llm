@@ -1,4 +1,8 @@
-"""UIA 原语层：唯一直接 import uiautomation 的地方。其他模块只吃这里导出的 dict 树。"""
+"""UIA 原语层：唯一直接 import uiautomation 的地方。其他模块只吃这里导出的 dict 树。
+
+客户端的识别特征（窗口标题、进程名、输入框控件类、资料卡号码标签）都从配置读，
+不写死任何具体客户端的字样——按你的 IM 客户端在 .env 里填好对应值即可。
+"""
 
 import os
 import subprocess
@@ -12,8 +16,9 @@ import win32con
 import win32gui
 import win32process
 
-QQ_WINDOW_CLASS = "Chrome_WidgetWin_1"
-QQ_WINDOW_TITLE = "QQ"
+from bridge import config
+
+CLIENT_WINDOW_CLASS = "Chrome_WidgetWin_1"  # Chromium/Electron 通用窗口类
 ACCESSIBILITY_FLAG = "--force-renderer-accessibility"
 
 VALUE_PATTERN_ID = 10002
@@ -23,6 +28,42 @@ WM_KEYDOWN = 0x0100
 WM_KEYUP = 0x0101
 
 _com_state = threading.local()
+
+
+def _client_exe_name() -> str:
+    """CLIENT_EXE 的 basename（小写），用于按进程名匹配窗口所属进程。"""
+    exe = config.get("CLIENT_EXE", r"C:\path\to\client.exe")
+    return os.path.basename(exe).lower()
+
+
+def _client_window_title() -> str:
+    """配置的主窗口标题；留空则只按窗口类匹配。"""
+    return config.get("CLIENT_WINDOW_TITLE", "").strip()
+
+
+def _editor_class_substring() -> str:
+    """聊天输入框控件的 ClassName 子串（按客户端填）。未配置时报错。"""
+    sub = config.get("CLIENT_EDITOR_CLASS", "").strip()
+    if not sub:
+        raise RuntimeError("未配置 CLIENT_EDITOR_CLASS：请在 .env 里填入聊天输入框控件的 ClassName 子串")
+    return sub
+
+
+def _id_label() -> str:
+    """资料卡里号码标签的文本（按客户端填）。未配置时报错。"""
+    label = config.get("CLIENT_ID_LABEL", "").strip()
+    if not label:
+        raise RuntimeError("未配置 CLIENT_ID_LABEL：请在 .env 里填入资料卡号码标签的文本")
+    return label
+
+
+def _default_max_depth() -> int:
+    """AX 树遍历深度上限（从配置读，默认 60）。
+
+    不同客户端 / 不同版本的 accessibility 树深浅不一：树太浅会读不到消息气泡，
+    太深又拖慢全树遍历（每节点一次 COM 往返）。按你的客户端在 .env 里调 AX_MAX_DEPTH。
+    """
+    return config.get_int("AX_MAX_DEPTH", 60)
 
 
 def _patch_thread_local_automation():
@@ -89,8 +130,10 @@ def _node(ctrl, depth: int, max_depth: int):
     return node
 
 
-def walk(ctrl, max_depth: int = 60) -> list:
+def walk(ctrl, max_depth: int = None) -> list:
     """AX 子树 → 纯 dict 树（type/name/value/children），供 reader 离线解析。"""
+    if max_depth is None:
+        max_depth = _default_max_depth()
     out = []
     try:
         kids = ctrl.GetChildren()
@@ -107,15 +150,15 @@ SNAPSHOT_TTL = 0.5  # 一次回复流程里会连着取好几次快照，全树�
 _snapshot_cache = {"at": 0.0, "nodes": []}
 
 
-def snapshot(max_depth: int = 60) -> list:
+def snapshot(max_depth: int = None) -> list:
     """客户端主窗口的 AX 快照；找不到窗口返回 []。
 
-    带半秒缓存：写一条消息要连着取好几次快照（当前会话 / 输入框 / 回读校验），
-    不缓存的话光快照就要十几秒，这是「回复太慢」的主因。
+    max_depth 不传时取 AX_MAX_DEPTH 配置值。带半秒缓存：写一条消息要连着取好几次快照
+    （当前会话 / 输入框 / 回读校验），不缓存的话光快照就要十几秒，这是「回复太慢」的主因。
     """
     if _snapshot_cache["nodes"] and time.time() - _snapshot_cache["at"] < SNAPSHOT_TTL:
         return _snapshot_cache["nodes"]
-    win = find_qq_window()
+    win = find_client_window()
     if win is None:
         return []
     nodes = walk(win, max_depth)
@@ -127,15 +170,20 @@ def snapshot(max_depth: int = 60) -> list:
 # ---------- 窗口定位与启动 ----------
 
 
-def find_qq_window():
+def find_client_window():
     """定位可见的客户端主窗口。
 
     Electron 会为同一个应用创建多个同名 Chrome_WidgetWin_1 窗口（多数不可见），
     按 UIA 桌面树取第一个会抓到隐藏窗口，坐标全错，所以这里按 Win32 枚举取可见且面积最大的。
+
+    匹配条件：窗口类 == CLIENT_WINDOW_CLASS，且（若配了 CLIENT_WINDOW_TITLE）标题精确相等，
+    且窗口所属进程的 exe 名 == CLIENT_EXE 的 basename。
     """
     ensure_com()
+    exe_name = _client_exe_name()
+    title = _client_window_title()
     try:
-        pids = {p.pid for p in auto.GetProcesses() if (p.exeName or "").lower() == "qq.exe"}
+        pids = {p.pid for p in auto.GetProcesses() if (p.exeName or "").lower() == exe_name} if exe_name else set()
     except Exception:
         pids = set()
     best = [None, 0]
@@ -143,11 +191,11 @@ def find_qq_window():
     def cb(hwnd, _):
         try:
             _, pid = win32process.GetWindowThreadProcessId(hwnd)
-            if pid not in pids:
+            if pids and pid not in pids:
                 return True
-            if win32gui.GetClassName(hwnd) != QQ_WINDOW_CLASS:
+            if win32gui.GetClassName(hwnd) != CLIENT_WINDOW_CLASS:
                 return True
-            if win32gui.GetWindowText(hwnd) != QQ_WINDOW_TITLE:
+            if title and win32gui.GetWindowText(hwnd) != title:
                 return True
             if not win32gui.IsWindowVisible(hwnd):
                 return True
@@ -169,7 +217,7 @@ def find_qq_window():
 
 
 def window_handle():
-    win = find_qq_window()
+    win = find_client_window()
     if win is None:
         return None
     try:
@@ -178,24 +226,24 @@ def window_handle():
         return None
 
 
-def qq_running() -> bool:
-    return find_qq_window() is not None
+def client_running() -> bool:
+    return find_client_window() is not None
 
 
-def launch_qq(exe: str = None, wait_seconds: int = 30) -> bool:
+def launch_client(exe: str = None, wait_seconds: int = 30) -> bool:
     """带无障碍开关启动客户端并等待主窗口出现。
 
     已运行的实例不重启——重启会踢掉用户已登录的会话。
     """
-    if qq_running():
+    if client_running():
         return True
-    exe = exe or os.environ.get("QQ_EXE", r"C:\Program Files\Tencent\QQNT\QQ.exe")
+    exe = exe or config.get("CLIENT_EXE", r"C:\path\to\client.exe")
     if not os.path.exists(exe):
         return False
     subprocess.Popen([exe, ACCESSIBILITY_FLAG])
     deadline = time.time() + wait_seconds
     while time.time() < deadline:
-        if find_qq_window() is not None:
+        if find_client_window() is not None:
             return True
         time.sleep(0.5)
     return False
@@ -305,8 +353,10 @@ def click_at(x: int, y: int) -> None:
     win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
 
-def iter_controls(ctrl, max_depth: int = 60):
-    """深度优先遍历活控件对象（保留对象引用，供点击使用）。"""
+def iter_controls(ctrl, max_depth: int = None):
+    """深度优先遍历活控件对象（保留对象引用，供点击使用）。max_depth 不传时取 AX_MAX_DEPTH。"""
+    if max_depth is None:
+        max_depth = _default_max_depth()
     yield ctrl
     if max_depth <= 0:
         return
@@ -321,7 +371,7 @@ def iter_controls(ctrl, max_depth: int = 60):
 
 def find_control(name: str = None, control_type: str = None, exact: bool = True):
     """在客户端主窗口里按名字/控件类型找活控件；找不到返回 None。"""
-    win = find_qq_window()
+    win = find_client_window()
     if win is None:
         return None
     for ctrl in iter_controls(win):
@@ -352,7 +402,7 @@ def click_name(name: str) -> bool:
 
 def input_box():
     """支持 ValuePattern 的输入控件（EditControl / DocumentControl）。"""
-    win = find_qq_window()
+    win = find_client_window()
     if win is None:
         return None
     for ctrl in iter_controls(win):
@@ -367,18 +417,19 @@ def input_box():
 
 
 def input_editor(conversation: str = None):
-    """聊天输入框：ClassName 含 ExEditor-qq-msg-editor 的 GroupControl。
+    """聊天输入框：ClassName 含配置的 CLIENT_EDITOR_CLASS 子串的 GroupControl。
 
     不用 AX Name 定位——输入框有内容后 Name 会变，conversation 参数只作校验用。
     """
-    win = find_qq_window()
+    win = find_client_window()
     if win is None:
         return None
+    editor_class = _editor_class_substring()
     for ctrl in iter_controls(win):
         try:
             if ctrl.ControlTypeName != "GroupControl":
                 continue
-            if "ExEditor-qq-msg-editor" not in (ctrl.ClassName or ""):
+            if editor_class not in (ctrl.ClassName or ""):
                 continue
             if conversation is not None and ctrl.Name and ctrl.Name != conversation:
                 continue
@@ -393,17 +444,18 @@ def find_chat_controls(conversation: str = None):
 
     分开找要各走一遍整棵树（各 2 秒以上），一次拿齐能省掉好几秒。
     """
-    win = find_qq_window()
+    win = find_client_window()
     if win is None:
         return None, None
+    editor_class = _editor_class_substring()
     editor = button = None
     for ctrl in iter_controls(win):
         try:
             ctype = ctrl.ControlTypeName
-            if ctype == "GroupControl" and "ExEditor-qq-msg-editor" in (ctrl.ClassName or ""):
+            if ctype == "GroupControl" and editor_class in (ctrl.ClassName or ""):
                 if conversation is None or not ctrl.Name or ctrl.Name == conversation:
                     editor = ctrl
-            elif ctype == "ButtonControl" and (ctrl.Name or "") == "发送":
+            elif ctype == "ButtonControl" and (ctrl.Name or "") == config.get("CLIENT_SEND_BUTTON_NAME", "发送"):
                 button = ctrl
         except Exception:
             continue
@@ -418,7 +470,7 @@ def open_conversation(name: str, timeout: float = 5.0) -> bool:
     当前策略只用用户手动打开的会话，不主动切（自动在多群发言太像机器）。
     保留这个原语给以后的白名单驱动模式用。
     """
-    pane = find_control(name="会话列表", control_type="PaneControl")
+    pane = find_control(name=config.get("CLIENT_CONVERSATION_PANE_NAME", "会话列表"), control_type="PaneControl")
     if pane is None:
         return False
     target = None
@@ -443,17 +495,22 @@ def open_conversation(name: str, timeout: float = 5.0) -> bool:
     return False
 
 
-PROFILE_CARD_TITLE = "资料卡"
+def _profile_card_title() -> str:
+    """资料卡窗口的标题（按客户端填）。留空则无法定位资料卡窗口。"""
+    return config.get("CLIENT_PROFILE_CARD_TITLE", "").strip()
 
 
 def find_profile_card():
     """定位资料卡窗口（点成员头像后会弹出）；没有返回 None。"""
+    title = _profile_card_title()
+    if not title:
+        return None
     ensure_com()
     found = []
 
     def cb(hwnd, _):
         try:
-            if win32gui.GetWindowText(hwnd) == PROFILE_CARD_TITLE:
+            if win32gui.GetWindowText(hwnd) == title:
                 found.append(hwnd)
         except Exception:
             pass
@@ -463,27 +520,28 @@ def find_profile_card():
     return found[0] if found else None
 
 
-def read_profile_card_qqid(timeout: float = 4.0) -> str:
+def read_profile_card_id(timeout: float = 4.0) -> str:
     """从已打开的资料卡里读号码；读不到返回空串。
 
     资料卡里号码标签后面跟的数字就是号码。调用方需自己先打开资料卡。
     """
+    label = _id_label().rstrip()
     deadline = time.time() + timeout
     while time.time() < deadline:
         hwnd = find_profile_card()
         if hwnd:
             try:
                 card = auto.ControlFromHandle(hwnd)
-                pending_qq = False
+                pending_id = False
                 for ctrl in iter_controls(card, 40):
                     try:
                         name = (ctrl.Name or "").strip()
                     except Exception:
                         continue
-                    if name == "QQ " or name == "QQ":
-                        pending_qq = True
+                    if name.rstrip() == label:
+                        pending_id = True
                         continue
-                    if pending_qq and name.isdigit() and len(name) >= 6:
+                    if pending_id and name.isdigit() and len(name) >= 6:
                         return name
             except Exception:
                 pass
@@ -503,7 +561,7 @@ def close_profile_card() -> None:
 
 
 def window_rect():
-    win = find_qq_window()
+    win = find_client_window()
     if win is None:
         return None
     return win.BoundingRectangle

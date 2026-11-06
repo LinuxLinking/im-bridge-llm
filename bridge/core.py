@@ -3,7 +3,7 @@
 import threading
 import time
 
-from bridge import agent, config, guard, identity, memory, qq_uia, reader, state, writer
+from bridge import agent, config, guard, identity, memory, client_uia, reader, state, writer
 
 config.load_env()
 
@@ -32,16 +32,16 @@ class Bridge:
             self.last_error = "状态落盘失败: %s" % exc
 
     def health(self) -> dict:
-        nodes = qq_uia.snapshot()
+        nodes = client_uia.snapshot()
         current = reader.parse_current_conversation(nodes)
         status = self.status
         if not self.poll_enabled:
             # 不轮询的实例（常驻 MCP）没有状态机，状态按界面实况给
-            status = "ok" if qq_uia.qq_running() and current else "no_open_conversation"
+            status = "ok" if client_uia.client_running() and current else "no_open_conversation"
         return {
             "status": status,
-            "qq_running": qq_uia.qq_running(),
-            "logged_in": status not in ("needs_login", "qq_unavailable", "a11y_unavailable"),
+            "client_running": client_uia.client_running(),
+            "logged_in": status not in ("needs_login", "client_unavailable", "a11y_unavailable"),
             "watching": status == "ok" and self.poll_enabled,
             "conversations_count": len(self.conversations(nodes)),
             "current_conversation": current,
@@ -51,13 +51,13 @@ class Bridge:
 
     def conversations(self, nodes=None) -> list:
         if nodes is None:
-            nodes = qq_uia.snapshot()
+            nodes = client_uia.snapshot()
         return reader.parse_conversations(nodes)
 
     def current_conversation(self, nodes=None) -> str:
         """当前手动打开的会话名（不切会话）。"""
         if nodes is None:
-            nodes = qq_uia.snapshot()
+            nodes = client_uia.snapshot()
         return reader.parse_current_conversation(nodes)
 
     def messages(self, conversation: str, nodes=None) -> list:
@@ -69,7 +69,7 @@ class Bridge:
         nodes 可以传入调用方已经抓好的快照——再抓一次要 2~4 秒。
         """
         if nodes is None:
-            nodes = qq_uia.snapshot()
+            nodes = client_uia.snapshot()
         current = reader.parse_current_conversation(nodes)
         if current != conversation:
             raise RuntimeError("只能操作当前打开的会话：当前是 %s" % (current or "（未识别）"))
@@ -108,15 +108,15 @@ class Bridge:
 
     def _poll(self):
         config.load_env()  # 热重载：手动改 .env 不用重启服务
-        if not qq_uia.qq_running():
-            self.status = "qq_unavailable"
+        if not client_uia.client_running():
+            self.status = "client_unavailable"
             return
-        nodes = qq_uia.snapshot()
+        nodes = client_uia.snapshot()
         if not nodes:
             self.empty_snapshots += 1
             if self.empty_snapshots >= 3:
                 self.status = "a11y_unavailable"
-                self.last_error = "AX 树为空：客户端需用 %s 启动" % qq_uia.ACCESSIBILITY_FLAG
+                self.last_error = "AX 树为空：客户端需用 %s 启动" % client_uia.ACCESSIBILITY_FLAG
             return
         self.empty_snapshots = 0
 
@@ -254,13 +254,13 @@ class Bridge:
         闸门只拦脏词和争议话题，其余都回；闲聊按群里说话节奏计数，超了就冻结。
         """
         self._reload_state()
-        nickname = config.get("QQ_SELF_NICKNAME")
+        nickname = config.get("SELF_NICKNAME")
         messages = self.messages(conversation, nodes)
         self._archive(conversation, messages)
         pending = [
             m for m in messages
             if m.text
-            and not m.is_self  # container--self 是客户端自己打的标记，比昵称可靠
+            and not m.is_self  # self 标记由客户端自己打，比昵称可靠
             and m.sender != nickname  # 兜底：昵称撞名时也不会误判成自己
             and not self.state.is_processed(conversation, state.fingerprint(m.time, m.text))
         ]

@@ -3,8 +3,18 @@
 import re
 from dataclasses import dataclass
 
-CONVERSATION_PANE = "会话列表"
-CHAT_PANE = "消息列表"
+from bridge import config
+
+CONVERSATION_PANE = "会话列表"  # 默认值；可被 CLIENT_CONVERSATION_PANE_NAME 覆盖
+CHAT_PANE = "消息列表"          # 默认值；可被 CLIENT_CHAT_PANE_NAME 覆盖
+
+
+def _conversation_pane_name() -> str:
+    return config.get("CLIENT_CONVERSATION_PANE_NAME", CONVERSATION_PANE)
+
+
+def _chat_pane_name() -> str:
+    return config.get("CLIENT_CHAT_PANE_NAME", CHAT_PANE)
 
 TIME_RE = re.compile(
     r"^(\d{1,2}:\d{2}(:\d{2})?|\d{4}/\d{1,2}/\d{1,2}( \d{1,2}:\d{2}(:\d{2})?)?|\d{1,2}/\d{1,2}"
@@ -94,12 +104,12 @@ def parse_conversations(nodes) -> list:
     主路径读「会话列表」Pane 下的会话项；Pane 找不到时退化为全树扫描
     （会话项 = 含时间文本、且不在消息区内的 Group）。
     """
-    pane = find_pane(nodes, CONVERSATION_PANE)
+    pane = find_pane(nodes, _conversation_pane_name())
     if pane is not None:
         convs = [_parse_conversation_item(child) for child in pane.get("children", [])]
         return [c for c in convs if c.name]
 
-    chat = find_pane(nodes, CHAT_PANE)
+    chat = find_pane(nodes, _chat_pane_name())
     convs = []
     for node, _ in iter_nodes(nodes):
         if node.get("type") != "GroupControl":
@@ -122,16 +132,22 @@ def _contains(root, target) -> bool:
     return False
 
 
-SELF_CLASS_MARK = "container--self"
+def _self_class_mark() -> str:
+    """本账号消息气泡的 className 标记（按客户端填，可用 scripts/dump_ax.py 查实际值）。
+
+    留空则放弃按 className 判定自己，退回昵称匹配（core 层有兜底）。比昵称可靠：
+    昵称会改、也可能撞名；self 标记由客户端自己打。
+    """
+    return config.get("CLIENT_SELF_CLASS_MARK", "").strip()
 
 
 def _is_self_message(node) -> bool:
-    """气泡容器的 className 带 container--self 就是本账号发的。
-
-    比昵称匹配可靠：昵称会改、也可能撞名；self 标记由客户端自己打。
-    """
+    """气泡容器里带配置的 self 标记就是本账号发的。"""
+    mark = _self_class_mark()
+    if not mark:
+        return False
     for child, _ in iter_nodes(node.get("children", [])):
-        if SELF_CLASS_MARK in (child.get("className") or ""):
+        if mark in (child.get("className") or ""):
             return True
     return False
 
@@ -183,7 +199,7 @@ def parse_chat(nodes) -> list:
     结构：气泡容器 = [时间组?, 内容组]；内容组 = [发送者组(具名), 名字组, 正文组]。
     正文取容器内最后一个非发送者名的文本；时间取正文前最近的时间戳文本，缺失时沿用上一条。
     """
-    pane = find_pane(nodes, CHAT_PANE)
+    pane = find_pane(nodes, _chat_pane_name())
     if pane is None:
         return []
 

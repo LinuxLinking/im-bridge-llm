@@ -3,17 +3,24 @@
 import os
 
 DEFAULTS = {
-    "HARNESS_BASE_URL": "https://agent.minimax.cn/mavis/api/v1/llm/v1",
-    "HARNESS_MODEL": "MiniMax-M3.1-Flash",
-    "HARNESS_TIMEOUT": "120",
-    "MODEL_PROVIDER": "harness",
     "DASHSCOPE_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "DASHSCOPE_MODEL": "qwen-plus",
     "DASHSCOPE_API_KEY": "",
+    "DASHSCOPE_TIMEOUT": "120",
     "POLL_INTERVAL": "1.5",
     "MIN_SEND_INTERVAL": "15",
-    "QQ_SELF_NICKNAME": "助手",
-    "QQ_EXE": r"C:\Program Files\Tencent\QQNT\QQ.exe",
+    "SELF_NICKNAME": "助手",
+    "CLIENT_EXE": r"C:\path\to\client.exe",
+    "CLIENT_CONVERSATION_PANE_NAME": "会话列表",
+    "CLIENT_CHAT_PANE_NAME": "消息列表",
+    "CLIENT_SEND_BUTTON_NAME": "发送",
+    "CLIENT_WINDOW_TITLE": "",
+    "CLIENT_EDITOR_CLASS": "",
+    "CLIENT_ID_LABEL": "",
+    "CLIENT_SELF_CLASS_MARK": "",
+    "CLIENT_HEADER_NAME_CLASS": "",
+    "CLIENT_PROFILE_CARD_TITLE": "",
+    "AX_MAX_DEPTH": "60",
     "STATE_FILE": "state.json",
     "IDENTITY_FILE": "identity.json",
     "MEMORY_ENABLED": "1",
@@ -79,7 +86,7 @@ def load_env(path: str = ".env") -> None:
 
 
 def set_whitelist(names, path: str = ".env") -> None:
-    """把白名单写回 .env 并立即生效（供 harness 工具调用）。"""
+    """把白名单写回 .env 并立即生效（供 MCP 工具调用）。"""
     value = ",".join(names)
     lines = []
     if os.path.exists(path):

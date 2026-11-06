@@ -11,7 +11,7 @@ import httpx
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-os.chdir(ROOT)  # .env / state.json 按项目目录解析，harness 从任意 cwd 拉起都一致
+os.chdir(ROOT)  # .env / state.json 按项目目录解析，MCP server 从任意 cwd 拉起都一致
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
@@ -21,12 +21,12 @@ from bridge import config, core, guard, identity, memory
 
 config.load_env()
 
-server = MCPServer("qq-bridge")
+server = MCPServer("im-bridge")
 bridge = core.Bridge(poll=False)
 
 
 @server.tool()
-def qq_list_conversations() -> list:
+def list_conversations() -> list:
     """列出客户端会话（会话名、时间、最后一条消息预览、未读数）。"""
     config.load_env()
     return [
@@ -36,7 +36,7 @@ def qq_list_conversations() -> list:
 
 
 @server.tool()
-def qq_read_messages(conversation: str, limit: int = 10) -> list:
+def read_messages(conversation: str, limit: int = 10) -> list:
     """读当前打开的会话最近的消息（sender / text / time）。
 
     不切会话：只能读用户当前打开的那个会话。
@@ -53,7 +53,7 @@ def qq_read_messages(conversation: str, limit: int = 10) -> list:
 
 
 @server.tool()
-def qq_send_text(conversation: str, text: str) -> dict:
+def send_text(conversation: str, text: str) -> dict:
     """往当前打开的会话发一条文本。
 
     只允许发到当前打开的会话，且该会话要在白名单里；
@@ -80,7 +80,7 @@ def qq_send_text(conversation: str, text: str) -> dict:
 
 
 @server.tool()
-def qq_reply_last(conversation: str) -> dict:
+def reply_last(conversation: str) -> dict:
     """对当前打开的会话里最后一条他人消息自动生成回复并发回去。
 
     回复由 bridge 直接调模型生成（不经子 agent：子 agent 一轮要几十秒）。
@@ -100,7 +100,7 @@ def qq_reply_last(conversation: str) -> dict:
 
 
 @server.tool()
-def qq_identity(nickname: str) -> dict:
+def resolve_identity(nickname: str) -> dict:
     """查某个昵称对应的号码（uin），用于区分同名的不同人。
 
     昵称可改、可撞名，号码才是真实身份。
@@ -110,18 +110,18 @@ def qq_identity(nickname: str) -> dict:
     path = config.get("IDENTITY_FILE")
     cached = identity.known(nickname, path)
     if cached:
-        return {"nickname": nickname, "qqid": cached, "source": "cache"}
+        return {"nickname": nickname, "uin": cached, "source": "cache"}
     uin = identity.resolve(nickname, path)
     return {
         "nickname": nickname,
-        "qqid": uin,
+        "uin": uin,
         "source": "profile_card" if uin else "not_found",
         "verification": identity.verify(nickname, path),
     }
 
 
 @server.tool()
-def qq_whitelist(action: str = "list", conversation: str = "") -> dict:
+def manage_whitelist(action: str = "list", conversation: str = "") -> dict:
     """查看或修改白名单会话（只有白名单里的群才允许自动回复）。
 
     action=list 看当前白名单；action=add 加一个群；action=remove 删一个群。
@@ -145,7 +145,7 @@ def qq_whitelist(action: str = "list", conversation: str = "") -> dict:
 
 
 @server.tool()
-def qq_memory(nickname: str = "") -> dict:
+def memory_profile(nickname: str = "") -> dict:
     """查记忆里关于某人的档案：是谁、偏好、提过什么事。
 
     不传昵称则返回所有人的档案列表。
@@ -160,7 +160,7 @@ def qq_memory(nickname: str = "") -> dict:
 
 
 @server.tool()
-def qq_forget(nickname: str) -> dict:
+def forget_profile(nickname: str) -> dict:
     """删掉某人的记忆档案（记错了就删掉，删了重新学）。
 
     只删人物档案，不删消息归档。
@@ -177,7 +177,7 @@ def qq_forget(nickname: str) -> dict:
 
 
 @server.tool()
-def qq_status() -> dict:
+def status() -> dict:
     """客户端与 bridge 的当前状态。"""
     config.load_env()
     return bridge.health()
@@ -185,7 +185,7 @@ def qq_status() -> dict:
 
 if __name__ == "__main__":
     if os.environ.get("MCP_TRANSPORT") == "streamable-http":
-        # 常驻模式：后台常驻进程对外提供 HTTP 端点，harness 不用每次拉起进程
+        # 常驻模式：后台常驻进程对外提供 HTTP 端点，调用方不用每次拉起进程
         # stateless：服务端不记会话，进程重启后客户端不用重新握手
         server.run(transport="streamable-http", host="127.0.0.1", port=8078, stateless_http=True)
     else:
